@@ -67,17 +67,14 @@ jobs:
           name: Install SAST tools
           command: |
             echo "Installing SAST tools..."
-            # Install Python-based tools first
             pip install --upgrade pip
             pip install semgrep bandit safety || echo "Python SAST tools installation completed"
             
-            # Install Node.js if not present
             if ! command -v node &> /dev/null; then
               curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
               sudo apt-get install -y nodejs
             fi
             
-            # Install ESLint if package.json exists
             if [ -f "package.json" ]; then
               npm install -g eslint eslint-plugin-security || echo "ESLint installation completed"
             fi
@@ -87,7 +84,6 @@ jobs:
           name: Run Semgrep SAST scan
           command: |
             echo "Running Semgrep security scan..."
-            # Create a basic semgrep config if none exists
             if [ ! -f ".semgrep.yml" ] && [ ! -d ".semgrep" ]; then
               echo "Using auto-config for Semgrep"
               semgrep --config=auto --skip-unknown --quiet || echo "Semgrep scan completed"
@@ -109,36 +105,31 @@ jobs:
           command: |
             if [ -f "package.json" ]; then
               echo "Running ESLint security scan..."
-              # Create a temporary ESLint config if none exists
-              if [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc" ]; then
-                cat > .eslintrc.temp.js << 'EOF'
-                module.exports = {
-                  extends: ["eslint:recommended"],
-                  env: {
-                    node: true,
-                    es6: true
-                  },
-                  rules: {
-                    "security/detect-buffer-noassert": "warn",
-                    "security/detect-child-process": "warn",
-                    "security/detect-disable-mustache-escape": "warn",
-                    "security/detect-eval-with-expression": "warn",
-                    "security/detect-no-csrf-before-method-override": "warn",
-                    "security/detect-non-literal-fs-filename": "warn",
-                    "security/detect-non-literal-regexp": "warn",
-                    "security/detect-non-literal-require": "warn",
-                    "security/detect-object-injection": "warn",
-                    "security/detect-possible-timing-attacks": "warn",
-                    "security/detect-pseudoRandomBytes": "warn",
-                    "security/detect-unsafe-regex": "warn"
-                  }
-                };
-EOF
-                npx eslint --config .eslintrc.temp.js . --ext .js,.jsx,.ts,.tsx || echo "ESLint scan completed"
-                rm -f .eslintrc.temp.js
-              else
-                npx eslint . --ext .js,.jsx,.ts,.tsx || echo "ESLint scan completed with existing config"
-              fi
+              cat > .eslintrc.temp.js << 'CONFIG_EOF'
+module.exports = {
+  extends: ["eslint:recommended"],
+  env: {
+    node: true,
+    es6: true
+  },
+  rules: {
+    "security/detect-buffer-noassert": "warn",
+    "security/detect-child-process": "warn",
+    "security/detect-disable-mustache-escape": "warn",
+    "security/detect-eval-with-expression": "warn",
+    "security/detect-no-csrf-before-method-override": "warn",
+    "security/detect-non-literal-fs-filename": "warn",
+    "security/detect-non-literal-regexp": "warn",
+    "security/detect-non-literal-require": "warn",
+    "security/detect-object-injection": "warn",
+    "security/detect-possible-timing-attacks": "warn",
+    "security/detect-pseudoRandomBytes": "warn",
+    "security/detect-unsafe-regex": "warn"
+  }
+};
+CONFIG_EOF
+              npx eslint --config .eslintrc.temp.js . --ext .js,.jsx,.ts,.tsx || echo "ESLint scan completed"
+              rm -f .eslintrc.temp.js
             else
               echo "No package.json found, skipping ESLint"
             fi
@@ -173,11 +164,10 @@ EOF
             echo "Installing SCA tools..."
             npm install -g @cyclonedx/bom || echo "CycloneDX installation completed"
             
-            # Install OWASP Dependency Check
             if [ ! -f "/usr/local/bin/dependency-check" ]; then
               echo "Installing OWASP Dependency Check..."
-              wget -q -O dependency-check.zip https://github.com/jeremylong/DependencyCheck/releases/download/v8.2.1/dependency-check-8.2.1-release.zip && \
-              unzip -q dependency-check.zip -d dependency-check && \
+              wget -q -O dependency-check.zip https://github.com/jeremylong/DependencyCheck/releases/download/v8.2.1/dependency-check-8.2.1-release.zip
+              unzip -q dependency-check.zip -d dependency-check
               chmod +x dependency-check/bin/dependency-check.sh || echo "Dependency check setup completed"
             fi
       - run:
@@ -185,8 +175,7 @@ EOF
           command: |
             echo "Generating SBOM..."
             if [ -f "package.json" ]; then
-              npx @cyclonedx/bom . --output sbom.json || \
-              echo "SBOM generation completed"
+              npx @cyclonedx/bom . --output sbom.json || echo "SBOM generation completed"
             elif [ -f "requirements.txt" ] || [ -f "Pipfile" ] || [ -f "pyproject.toml" ]; then
               pip install cyclonedx-bom || echo "CycloneDX Python installed"
               cyclonedx-py -o sbom.json . || echo "Python SBOM generation completed"
@@ -311,8 +300,6 @@ EOF
             
             pip install requests pyyaml || echo "Basic Python packages installed"
             
-            # Install ZAPROXY
-            echo "Installing ZAP Proxy..."
             ZAP_VERSION="2.12.0"
             wget -q -O zap.tar.gz "https://github.com/zaproxy/zaproxy/releases/download/v${ZAP_VERSION}/ZAP_${ZAP_VERSION}_Linux.tar.gz"
             tar -xzf zap.tar.gz
@@ -323,27 +310,20 @@ EOF
           name: Run basic API security tests
           command: |
             echo "Starting API security testing..."
-            
-            # Create API security reports directory
             mkdir -p api-security-reports
             
             if [ -n "${API_BASE_URL}" ]; then
               echo "Testing API endpoints for ${API_BASE_URL}"
-              
-              # Basic API security tests using curl
               echo "=== API Security Test Report ===" > api-security-reports/basic-tests.txt
               echo "Tested URL: ${API_BASE_URL}" >> api-security-reports/basic-tests.txt
               echo "Timestamp: $(date)" >> api-security-reports/basic-tests.txt
               
-              # Test common security headers
               echo "Testing security headers..." >> api-security-reports/basic-tests.txt
               curl -I -s "${API_BASE_URL}" | grep -i "security\|x-frame\|x-content-type\|strict-transport\|cors" >> api-security-reports/basic-tests.txt || echo "No security headers found or endpoint not accessible" >> api-security-reports/basic-tests.txt
               
-              # Test for common vulnerabilities - basic connectivity
               echo "Testing basic API connectivity..." >> api-security-reports/basic-tests.txt
               curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" "${API_BASE_URL}" >> api-security-reports/basic-tests.txt 2>&1 || echo "Connectivity test failed" >> api-security-reports/basic-tests.txt
               
-              # If ZAP is available, run it (non-blocking)
               if command -v zap-baseline &> /dev/null && [ -n "${API_BASE_URL}" ]; then
                 echo "Running ZAP baseline scan (this may take several minutes)..."
                 timeout 600 /opt/zap/zap-baseline.py -t "${API_BASE_URL}" -I -j -T 5 -m 1 -r api-security-reports/zap-report.html 2>&1 | tee api-security-reports/zap-output.txt || echo "ZAP scan completed"
@@ -356,7 +336,6 @@ EOF
               echo "API_BASE_URL not set, performing generic API security checks"
               echo "No specific API endpoints tested - API_BASE_URL environment variable required for full testing" > api-security-reports/README.txt
               
-              # Check for API-related files in the project
               if [ -f "package.json" ] && grep -q "\"express\"" "package.json"; then
                 echo "Express.js API framework detected" >> api-security-reports/README.txt
               fi
@@ -364,11 +343,9 @@ EOF
                 echo "Python web framework detected" >> api-security-reports/README.txt
               fi
               
-              # Create a basic success report
               echo "Generic API security assessment completed" >> api-security-reports/README.txt
             fi
             
-            # Always create at least one artifact to prevent failures
             if [ ! -f "api-security-reports/basic-tests.txt" ]; then
               echo "API Security Testing Completed - No specific tests run due to configuration" > api-security-reports/basic-tests.txt
             fi
@@ -393,16 +370,12 @@ EOF
             
             if [ -n "${APP_DOMAIN}" ]; then
               echo "Testing SSL configuration for ${APP_DOMAIN}"
-              
-              # Test 1: Basic SSL certificate check
               echo "=== SSL Certificate Check ===" > ssl-reports/ssl-report.txt
               timeout 30 openssl s_client -connect "${APP_DOMAIN}:443" -servername "${APP_DOMAIN}" < /dev/null 2>&1 | openssl x509 -noout -subject -dates -issuer >> ssl-reports/ssl-report.txt 2>&1 || echo "Certificate check completed" >> ssl-reports/ssl-report.txt
               
-              # Test 2: SSLScan
               echo "=== SSLScan Results ===" >> ssl-reports/ssl-report.txt
               timeout 60 sslscan "${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>&1 || echo "SSLScan completed" >> ssl-reports/ssl-report.txt
               
-              # Test 3: NMAP SSL enumeration
               echo "=== NMAP SSL/TLS Enumeration ===" >> ssl-reports/ssl-report.txt
               timeout 60 nmap --script ssl-enum-ciphers -p 443 "${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>&1 || echo "NMAP scan completed" >> ssl-reports/ssl-report.txt
               
@@ -433,7 +406,6 @@ EOF
           name: Security integration tests
           command: |
             echo "Running security-focused integration tests..."
-            # Basic security integration checks
             echo "Security Integration Test Results" > test-results/security-results.txt
             echo "Timestamp: $(date)" >> test-results/security-results.txt
             echo "Build: ${CIRCLE_BUILD_NUM}" >> test-results/security-results.txt
