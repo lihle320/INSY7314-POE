@@ -67,7 +67,6 @@ jobs:
           name: Install SAST tools
           command: |
             echo "Installing SAST tools..."
-            set -e  # Exit on any error
             
             # Install Python-based tools first
             pip install --upgrade pip
@@ -90,7 +89,7 @@ jobs:
           command: |
             # Create default ESLint security config if none exists
             if [ -f "package.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.json" ]; then
-              cat > .eslintrc.security.js << 'EOF'
+              cat > .eslintrc.security.js << 'CONFIG'
 module.exports = {
   env: {
     node: true,
@@ -113,7 +112,7 @@ module.exports = {
     'security/detect-unsafe-regex': 'warn'
   }
 };
-EOF
+CONFIG
             fi
       - run:
           name: Run Semgrep SAST scan
