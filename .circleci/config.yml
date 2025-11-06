@@ -105,11 +105,10 @@ jobs:
               echo "No Python files to scan" > bandit-report.txt
             fi
       - run:
-          name: Run ESLint security scan
+          name: Create ESLint security config
           command: |
             if [ -f "package.json" ]; then
-              echo "Running ESLint security scan..."
-              # Create a basic ESLint security config
+              echo "Creating ESLint security configuration..."
               cat > .eslintrc.security.js << 'EOF'
               module.exports = {
                 extends: ["eslint:recommended"],
@@ -133,7 +132,14 @@ jobs:
                 }
               };
               EOF
-              
+            else
+              echo "No package.json found, skipping ESLint config creation"
+            fi
+      - run:
+          name: Run ESLint security scan
+          command: |
+            if [ -f "package.json" ]; then
+              echo "Running ESLint security scan..."
               npx eslint --config .eslintrc.security.js . 2>/dev/null || echo "ESLint scan completed"
             else
               echo "No package.json found, skipping ESLint"
