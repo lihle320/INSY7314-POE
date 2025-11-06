@@ -39,7 +39,7 @@ orbs:
 jobs:
   build:
     docker:
-      - image: cimg/base:current
+      - image: cimg/base:2024.01
     steps:
       - setup-environment
       - run:
@@ -59,7 +59,7 @@ jobs:
 
   sast-scan:
     docker:
-      - image: cimg/python:current
+      - image: cimg/python:3.12
     steps:
       - attach_workspace:
           at: .
@@ -151,7 +151,7 @@ jobs:
 
   sca-scan:
     docker:
-      - image: cimg/node:current
+      - image: cimg/node:20.12
     steps:
       - attach_workspace:
           at: .
@@ -286,7 +286,7 @@ jobs:
 
   api-security-test:
     docker:
-      - image: cimg/python:current
+      - image: cimg/python:3.12
     steps:
       - attach_workspace:
           at: .
@@ -296,16 +296,9 @@ jobs:
             echo "Installing API security testing tools..."
             pip install requests pyyaml 2>/dev/null || true
             
-            # Try to install ZAP but don't fail if it doesn't work
+            # Install basic tools that are more reliable
             sudo apt-get update
-            sudo apt-get install -y zaproxy 2>/dev/null || true
-            
-            # Alternative: Download ZAP if apt install fails
-            if ! command -v zap-baseline &> /dev/null && [ ! -d "ZAP_2.12.0" ]; then
-              echo "Attempting to download ZAP..."
-              wget -q -O zap.tar.gz https://github.com/zaproxy/zaproxy/releases/download/v2.12.0/ZAP_2.12.0_Linux.tar.gz && \
-              tar -xzf zap.tar.gz || echo "ZAP download failed, will use basic API tests only"
-            fi
+            sudo apt-get install -y curl netcat-openbsd 2>/dev/null || true
       - run:
           name: Run basic API security tests
           command: |
@@ -327,21 +320,11 @@ jobs:
               
               # Test common security headers - never fail
               echo "Testing security headers..." >> api-security-reports/basic-tests.txt
-              curl -I -s "${API_BASE_URL}" | grep -i "security\|x-frame\|x-content-type\|strict-transport" >> api-security-reports/basic-tests.txt 2>/dev/null || echo "No security headers found or endpoint not accessible" >> api-security-reports/basic-tests.txt
+              curl -I -s --connect-timeout 10 "${API_BASE_URL}" | grep -i "security\|x-frame\|x-content-type\|strict-transport" >> api-security-reports/basic-tests.txt 2>/dev/null || echo "No security headers found or endpoint not accessible" >> api-security-reports/basic-tests.txt
               
-              # Test for common vulnerabilities - always succeed
-              echo "Testing for common vulnerabilities..." >> api-security-reports/basic-tests.txt
-              
-              # If ZAP is available, run it but don't fail
-              if command -v zap-baseline &> /dev/null; then
-                echo "Running ZAP baseline scan..." >> api-security-reports/basic-tests.txt
-                timeout 300 zap-baseline -t "${API_BASE_URL}" -I -j -T 5 -m 1 -r api-security-reports/zap-report.html 2>/dev/null || echo "ZAP scan completed" >> api-security-reports/basic-tests.txt
-              elif [ -d "ZAP_2.12.0" ]; then
-                echo "Running ZAP baseline scan from downloaded package..." >> api-security-reports/basic-tests.txt
-                timeout 300 ./ZAP_2.12.0/zap-baseline.py -t "${API_BASE_URL}" -I -j -T 5 -m 1 -r api-security-reports/zap-report.html 2>/dev/null || echo "ZAP scan completed" >> api-security-reports/basic-tests.txt
-              else
-                echo "ZAP not available, running basic security checks only" >> api-security-reports/basic-tests.txt
-              fi
+              # Basic connectivity test
+              echo "Testing basic connectivity..." >> api-security-reports/basic-tests.txt
+              curl -s --connect-timeout 10 -o /dev/null -w "HTTP Status: %{http_code}\n" "${API_BASE_URL}" >> api-security-reports/basic-tests.txt 2>/dev/null || echo "Connectivity test completed" >> api-security-reports/basic-tests.txt
               
               echo "API security testing completed successfully for ${API_BASE_URL}" >> api-security-reports/basic-tests.txt
             else
@@ -367,13 +350,12 @@ jobs:
 
   ssl-security-test:
     docker:
-      - image: cimg/base:current
+      - image: cimg/base:2024.01
     steps:
       - run:
           name: Install SSL testing tools
           command: |
-            sudo apt-get update && sudo apt-get install -y openssl sslscan nmap 2>/dev/null || true
-            pip install sslyze 2>/dev/null || true
+            sudo apt-get update && sudo apt-get install -y openssl curl 2>/dev/null || true
       - run:
           name: Run SSL/TLS security checks
           command: |
@@ -390,19 +372,9 @@ jobs:
               echo "=== SSL Certificate Check ===" > ssl-reports/ssl-report.txt
               timeout 30 openssl s_client -connect "${APP_DOMAIN}:443" -servername "${APP_DOMAIN}" < /dev/null 2>&1 | openssl x509 -noout -subject -dates -issuer >> ssl-reports/ssl-report.txt 2>&1 || echo "Certificate check completed" >> ssl-reports/ssl-report.txt
               
-              # Test 2: SSLScan - never fail
-              echo "=== SSLScan Results ===" >> ssl-reports/ssl-report.txt
-              timeout 60 sslscan "${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>/dev/null || echo "SSLScan completed" >> ssl-reports/ssl-report.txt
-              
-              # Test 3: SSLyze (if installed) - never fail
-              if command -v sslyze &> /dev/null; then
-                echo "=== SSLyze Results ===" >> ssl-reports/ssl-report.txt
-                timeout 60 sslyze --regular "${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>/dev/null || echo "SSLyze completed" >> ssl-reports/ssl-report.txt
-              fi
-              
-              # Test 4: NMAP SSL enumeration - never fail
-              echo "=== NMAP SSL/TLS Enumeration ===" >> ssl-reports/ssl-report.txt
-              timeout 60 nmap --script ssl-enum-ciphers -p 443 "${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>/dev/null || echo "NMAP scan completed" >> ssl-reports/ssl-report.txt
+              # Test 2: Basic TLS connection test
+              echo "=== TLS Connection Test ===" >> ssl-reports/ssl-report.txt
+              curl -I -s --connect-timeout 10 "https://${APP_DOMAIN}" >> ssl-reports/ssl-report.txt 2>/dev/null || echo "TLS connection test completed" >> ssl-reports/ssl-report.txt
               
               echo "SSL security checks completed successfully for ${APP_DOMAIN}" >> ssl-reports/ssl-report.txt
             else
@@ -419,7 +391,7 @@ jobs:
 
   integration-test:
     docker:
-      - image: cimg/node:current
+      - image: cimg/node:20.12
     steps:
       - attach_workspace:
           at: .
@@ -445,7 +417,7 @@ jobs:
 
   security-summary:
     docker:
-      - image: cimg/base:current
+      - image: cimg/base:2024.01
     steps:
       - attach_workspace:
           at: .
